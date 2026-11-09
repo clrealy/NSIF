@@ -1,0 +1,10 @@
+/target
+/fuzz/target
+# Fuzzer state is machine-local and regenerable: the seed corpus is produced
+# by `cargo test -p nsif-format --test corpus -- --ignored`, and any crash the
+# fuzzer finds is promoted to a regression test in tests/reject.rs rather than
+# being carried here as a binary blob.
+/fuzz/corpus
+/fuzz/artifacts
+/fuzz/Cargo.lock
+fuzz-*.log

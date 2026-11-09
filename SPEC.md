@@ -2,8 +2,25 @@
 
 **On-disk format specification, version 0.1 (draft, v0)**
 
-Status: draft, pending approval. Nothing here is stable until v1.0.
+Status: draft, approved for implementation. Nothing here is stable until v1.0.
 Document date: 2026-11-09.
+
+**Amendments since first approval** (all clarifications; no byte offset, no
+GUID and no signed-message construction changed):
+
+- §5.2: corrected a wrong note that claimed the CDDL's alphabetical key order
+  was the canonical order. It is not; canonical order is length-first. The
+  canonical order is now written out explicitly.
+- §5.1.9: added — map keys must be text strings.
+- §5.3.13: added — unknown top-level manifest keys are rejected while the
+  major version is 0.
+- §5.1.5: added — negative integers (CBOR major type 1) are rejected; every
+  numeric field in the schema is unsigned. Found by fuzzing the manifest
+  parser, which reached an unhandled major type.
+- §10.2: resolved a contradiction between §10.2 and §5.3(8) over whether
+  `max_expansion` meant the total output bound or the excess over the input.
+  It is the excess; §10.2 now states both forms in a table. This tightens
+  the accepted `clen` range from about `2n` to `n + n/256 + 64`.
 
 ---
 
@@ -297,12 +314,17 @@ enforce:
 3. Map keys sorted ascending by **bytewise lexicographic comparison of
    their encoded bytes**.
 4. No duplicate map keys.
-5. No major type 7 floats (`0xF9`–`0xFB`), no `undefined`, no tags (major
-   type 6). `true`/`false` are permitted.
+5. No major type 7 floats (`0xF9`–`0xFB`), no `null`, no `undefined`, no
+   other simple values, no tags (major type 6), and **no negative integers
+   (major type 1)** — every numeric field in §5.2 is unsigned.
+   `true`/`false` are permitted.
 6. Text strings MUST be well-formed UTF-8. No normalisation is required or
    performed; byte equality is identity.
 7. Maximum nesting depth 4.
 8. No trailing bytes after the top-level item within `manifest_len`.
+9. Every map key MUST be a text string (major type 3). Integer and
+   byte-string keys are rejected, so key ordering is always well defined
+   without a cross-type rule.
 
 A manifest that violates any of these MUST be rejected, even if it parses.
 This is what makes "re-encode and compare" a valid implementation test.
@@ -346,9 +368,29 @@ chunk = [bstr .size 32, uint, uint, uint, uint]
 espfile = [tstr, uint, bstr .size 32]
 ```
 
-Note the key order in the CDDL above is already the deterministic order
-(bytewise on the encoded text strings), so an implementation can emit the
-fields in that written order.
+**The CDDL above is written in alphabetical order for readability. That is
+NOT the canonical order.** §5.1.3 sorts keys by the bytes of their *encoded*
+form, and a text string's encoding starts with a head byte of `0x60 + length`
+for lengths under 24, so canonical order is **length first, then byte value**.
+The canonical top-level key order is therefore:
+
+```
+arch, name, codec, chunks, format, cmdline, version, chunking, metadata,
+esp_files, build_date, rootfs_hash, rootfs_size, codec_params,
+image_version, rootfs_fstype, version_ordinal
+```
+
+and inside `chunking`:
+
+```
+avg, max, min, algo, seed, normalization
+```
+
+An implementation that emits keys in alphabetical order produces a
+non-canonical manifest whose signature no other implementation will
+reproduce. The safest construction is to buffer each key/value pair, sort by
+encoded key bytes, and only then emit the map head — then the written order
+in the source is irrelevant.
 
 ### 5.3 Manifest invariants
 
@@ -383,6 +425,15 @@ A reader MUST reject the manifest unless all of the following hold:
     case-insensitive.
 12. `name`, `image_version`, `cmdline` each `<= 4096` bytes; `metadata` has
     `<= 64` entries, each key `<= 128` and value `<= 4096` bytes.
+13. **Unknown top-level keys MUST be rejected** while `version_major` is 0.
+    Because §4.1.2 already rejects an unknown `version_minor`, no conforming
+    0.x producer can emit a key this document does not define, so an unknown
+    key means a corrupt or hostile manifest. (From format 1.0 onward,
+    unknown top-level keys are to be ignored instead, matching §4.1.2's
+    forward-compatibility rule. `metadata` keys are always ignored when
+    unknown — see §5.5.) Unknown keys inside `chunking` are likewise
+    rejected; unknown keys inside `codec_params` are rejected by the codec
+    (§10.1).
 
 `rootfs_hash` is the BLAKE3-256 of the concatenation of all chunks'
 uncompressed bytes in order. It is redundant with the per-chunk hashes but
@@ -649,8 +700,22 @@ clear "unsupported codec" error naming the id.
 
 ### 10.2 `max_expansion`
 
-For zstd: `n + (n >> 8) + 64`. For `none`: `0`. §5.3(8) uses the value for
-the manifest's declared codec.
+`max_expansion(n)` is the number of bytes the output may occupy **beyond**
+`n`, so the total bound on a compressed chunk is `n + max_expansion(n)`,
+which is the form §5.3(8) uses.
+
+| id | `max_expansion(n)` | total bound |
+|---|---|---|
+| `zstd` | `(n >> 8) + 64` | `n + (n >> 8) + 64` |
+| `none` | `0` | `n` |
+
+The zstd total bound is `ZSTD_COMPRESSBOUND` rounded up: that function adds
+`n >> 8` plus, for inputs under 128 KiB, `(128 KiB - n) >> 11`, which is at
+most 64. §5.3(8) uses the value for the manifest's declared codec.
+
+Note for implementers: reading `max_expansion` as the *total* bound rather
+than the *excess* makes §5.3(8) accept roughly `2n`, which is a much weaker
+check than intended. The table above is normative.
 
 ### 10.3 Reproducibility caveat
 

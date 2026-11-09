@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = ["crates/nsif-format"]
+exclude = ["fuzz"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+repository = "https://github.com/clrealy/NSIF"
+
+[workspace.dependencies]
+blake3 = "1"
+zstd = "0.14"
+ed25519-dalek = "3"
+fastcdc = "5"
+crc32c = "0.6"
+crc32fast = "1"
+thiserror = "2"
+hex = "0.4"
