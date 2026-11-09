@@ -264,6 +264,30 @@ M5.
 - `pack` requires `--build-date` or `SOURCE_DATE_EPOCH`; it will not
   silently use "now" and produce an unreproducible file.
 
+## 6a. Release codenames
+
+Theme: **blunt tools**. Alphabetical, so the ordering is readable from the
+name alone and the list never runs out.
+
+| Version | Codename |
+|---|---|
+| **0.1** | **Hammer** |
+| 0.2 | Crowbar |
+| 0.3 | Grinder |
+| 0.4 | Jackhammer |
+| 1.0 | Sledge |
+
+The codename names a *tooling and format generation*, not a build. It is
+recorded in the manifest as `metadata["nsif.codename"]` (SPEC §5.5), which
+is a reserved key in a free-form map — adding it is explicitly non-breaking
+per SPEC §15, so it costs nothing on disk and nothing in the boot path.
+`nsif info` prints it; nothing else reads it.
+
+The on-disk `version_major`/`version_minor` in the payload header remain the
+only thing any code makes decisions on. Codenames are for release notes and
+for people, and a mismatch between codename and version numbers is a
+cosmetic bug, never a compatibility question.
+
 ## 7. Decisions I need from you
 
 These are the on-disk-format items, which is the expensive thing to change

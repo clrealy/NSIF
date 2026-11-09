@@ -400,6 +400,29 @@ coalesced for efficiency when adjacent).
 
 ---
 
+### 5.5 Reserved `metadata` keys
+
+`metadata` is a free-form `tstr => tstr` map (SPEC §5.2), capped at 64
+entries. Keys containing a `.` are namespaced; the `nsif.` namespace is
+reserved by this specification. A reader MUST ignore any `metadata` key it
+does not recognise — unknown keys here are never an error, and adding one is
+not a format change (§15).
+
+| Key | Meaning | Set by |
+|---|---|---|
+| `nsif.codename` | Release codename for this image's format/tooling generation, e.g. `Hammer`. Display only. | `nsif pack` |
+| `nsif.packer` | Name and version of the tool that built the image, e.g. `nsif 0.1.0`. | `nsif pack` |
+| `zstd.version` | zstd library version string used for compression, e.g. `1.5.6`. Makes a reproducibility mismatch diagnosable (§10.3). | `nsif pack` |
+
+Publishers MAY add their own keys under their own namespace
+(`fedora.`, `acme.`, …). Nothing in the boot path or the update path reads
+`metadata`; it exists for `nsif info` and for humans.
+
+Note that `metadata` **is** inside the signed manifest, so these values are
+authenticated to the same degree as everything else — which, per §12, means
+authenticated when checked by `nsif verify` with a key you obtained out of
+band, and not at all at boot time.
+
 ## 6. ESP contents
 
 FAT32, 512-byte sectors, 4096-byte (8-sector) clusters, 2 FATs, 32 reserved
